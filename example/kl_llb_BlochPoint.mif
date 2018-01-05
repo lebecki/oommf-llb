@@ -1,0 +1,130 @@
+# MIF 2.2
+# Soft cube sample with permalloy-like parameters.
+# Opposite faces are fixed: kept antiparallel.
+# Thus, a Bloch Point configuration is formed inside.
+# (Might depend on the random seed.)
+
+RandomSeed 11
+
+Parameter procNr		"bp-example-300";
+
+Parameter cubeedge             	64e-9;
+Parameter cellsize 	       	2e-9;
+
+# Parameter values for some temperatures
+# T(K)  chi_par         Ms(A/m)    A(J/m)
+# 300   0.000568129     736084     1.02552e-011
+# 600   0.00226368      557980     6.69809e-012
+# 800   0.0100503       306148     2.59782e-012
+Parameter temperature     "300";
+#
+# Material parameters
+# Magnetization saturation (at zero temperature)
+Parameter Ms_T0            	860000;
+# Equilibrium magnetization
+Parameter Me_T                	736084;
+# Critical temperature is 870 K
+Parameter relative_temperature  [expr {(1.0*$temperature)/870}];
+Parameter chi_parallel          0.000568129;
+Parameter A			1.02552e-011;
+Parameter alpha                 .5
+
+############################ Geometry
+
+Specify Oxs_MultiAtlas:atlas [subst {
+   atlas {Oxs_BoxAtlas {
+      xrange {0 				$cellsize}
+      yrange {0 				$cubeedge}
+      zrange {0 				$cubeedge}
+      name left_edge
+   }}
+   atlas {Oxs_BoxAtlas {
+      xrange {[expr {$cubeedge-$cellsize}]	$cubeedge}
+      yrange {0 				$cubeedge}
+      zrange {0 				$cubeedge}
+      name right_edge
+   }}
+   atlas {Oxs_BoxAtlas {
+      xrange {$cellsize        [expr {$cubeedge-$cellsize}]}
+      yrange {0 				$cubeedge}
+      zrange {0 				$cubeedge}
+      name interior
+   }}
+}]
+
+# Supplemental atlas, used to specify fixed spins
+Specify Oxs_MultiAtlas:Edges [subst {
+   atlas {Oxs_BoxAtlas:left_edge {
+      xrange {0 				$cellsize}
+      yrange {0 				$cubeedge}
+      zrange {0 				$cubeedge}
+   }}
+   atlas {Oxs_BoxAtlas:right_edge {
+      xrange {[expr {$cubeedge-$cellsize}]	$cubeedge}
+      yrange {0 				$cubeedge}
+      zrange {0 				$cubeedge}
+   }}
+}]
+
+Specify Oxs_RectangularMesh:mesh [subst {
+  cellsize {$cellsize $cellsize $cellsize}
+  atlas :atlas
+}]
+
+########## energies ################
+
+Specify Oxs_Demag {}
+
+Specify Klm_LLB_Term [subst {
+  chi_parallel	$chi_parallel
+}]
+
+Specify Klm_UniformExchange [subst {
+  kernel	6ngbrLLB
+  A  		$A
+}]
+
+########## default outputs ###################
+
+Destination graph mmGraph:$procNr 
+Destination arch  mmArchive:$procNr 
+#
+Schedule DataTable                     graph step 20
+Schedule DataTable                     arch stage 1
+Schedule Klm_TimeDriver::Magnetization arch stage 1
+
+########## evolver and driver ################
+
+Specify Klm_LLB_RKEvolve:evolve [subst {
+  relative_temperature $relative_temperature
+  alpha $alpha
+  fixed_spins {
+      :Edges left_edge right_edge
+  }
+} ]
+
+SetOptions [subst {
+  basename ${procNr}
+  vector_field_output_format {binary 4}
+}]
+
+Specify Klm_TimeDriver [subst {
+  evolver :evolve
+  mesh :mesh
+  normalize_aveM_output 0
+  stopping_dM_dt 1.5e11
+  Ms_initial  $Me_T
+  Ms          $Me_T
+  Ms_T0       $Ms_T0
+  m0 { Oxs_AtlasVectorField {
+    atlas :atlas
+    default_value { Oxs_RandomVectorField {
+      min_norm 1
+      max_norm 1
+    }}
+    values {
+      left_edge  {  1 0 0 }
+      right_edge { -1 0 0 }
+    }
+  }}  
+}]
