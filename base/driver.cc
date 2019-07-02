@@ -1517,6 +1517,9 @@ void Oxs_Driver::Run(vector<OxsRunEvent>& results,
         current_state.GetReadReference();
       }
       // NB: STAGE_END flow continues through STAGE_START block
+      // Following line is necessary to avoind the warning in the compiler 
+      // gcc 7.2.0 / x86_64-w64-mingw32.
+      // fall through
       case OXSDRIVER_PS_STAGE_START:
         InitNewStage(current_state,previous_state); // Send state to
                                  /// evolver for bookkeeping updates.

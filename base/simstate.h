@@ -1,9 +1,24 @@
-/* FILE: simstate.h                 -*-Mode: c++-*-
+/* FILE: simstate.h                 -*-Mode: c++-*- 
  *
  * Simulation state class.
  *
  * Marked with "KL(m)" are changes allowing variable-M-length-extension.
- * (Landau-Lifshitz-Bloch approach).
+ * (Landau-Lifshitz-Bloch approach, LLB).
+ * These adaptations focus on following two areas.
+ * First, two new tables are introduced:
+ *   const Oxs_MeshValue<OC_REAL8m>* Ms_T0_ptr;
+ *   const Oxs_MeshValue<OC_REAL8m>* Me_T_ptr;
+ *   These tables store the magnetization length at T=0 and
+ *   at the magnetization equilibrium length for a given temperature, 
+ *   respecively.
+ * Second, storage/access of two "old" tables is modified:
+ *   Oxs_OwnedPointer<const Oxs_MeshValue<OC_REAL8m> > Ms;
+ *   Oxs_OwnedPointer<const Oxs_MeshValue<OC_REAL8m> > Ms_inverse;
+ *   I believe they are used to enable read-write dynamical access
+ *   to these tables - in LLB-approach these values are namely 
+ *   variable, not constant (as in "standard" LLG).
+ * Note: length of the spin-table entries is still equal to one.
+ * Kristof Lebecki, Warsaw 15.01.2019, a/k/a KL(m) 
  *
  */
 
@@ -61,8 +76,9 @@ private:
   // hold in the driver.
   const Oxs_MeshValue<OC_REAL8m>* Ms_T0_ptr;
   const Oxs_MeshValue<OC_REAL8m>* Me_T_ptr;
-  // They are used in Klm_LLB_Term, Klm_TimeDriverVarMs and Klm_LLB_RKevolver.
-  // "Startndard" OOMMF classes do not use it, they use Ms.
+  // They are used in Klm_LLB_Term, Klm_TimeDriver, Klm_UniformExchange,
+  // and Klm_LLB_RKEvolve (only Ms_T0_ptr).
+  // "Standard" OOMMF classes do not use it, they use Ms.
   // Thus, it is possible that it remains set to NULL.
 
 public:
