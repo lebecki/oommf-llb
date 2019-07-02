@@ -4,7 +4,6 @@
  * derived from Oxs_Energy class.
  * Based on file: uniformexchange.h
  * Extensions done by Kristof Lebecki, Universität Konstanz (Feb 2010):
- * - periodic boundary onditions in z-dimension
  * - taking into account non-uniform magnetization, caused by temperature
  *
  */
@@ -23,8 +22,11 @@
 
 /* End includes */
 
-class Klm_UniformExchange:public Oxs_ChunkEnergy {
+class Klm_UniformExchange
+  : public Oxs_ChunkEnergy, public Oxs_EnergyPreconditionerSupport {   
 private:
+  // KL(m) Actually, we support only "A_TYPE"
+  // But I leave all these lines to keep the difference in code as small as possible
   enum ExchangeCoefType {
     A_UNKNOWN, A_TYPE, LEX_TYPE
   }  excoeftype;
@@ -32,21 +34,20 @@ private:
   OC_REAL8m lex;
 
   enum ExchangeKernel { NGBR_UNKNOWN,
-			NGBR_6_FREE,
-                        NGBR_6_MIRROR, NGBR_6_MIRROR_STD,
-                        NGBR_6_BIGANG_MIRROR, NGBR_6_ZD2,
-// KL(m) Both are based on NGBR_6_MIRROR, i.e. CalcEnergy6NgbrMirror
-// (eventually on CalcEnergy6NgbrMirror_lex)
-			NGBR_6_Z_PERIOD, // KL(m) z-periodic conditions.
-			NGBR_6_LLB,      // KL(m) LLB: influence of temperature
-			NGBR_6_LLB_Z_P,  // KL(m) LLB + z-periodicity
-			NGBR_12_FREE, NGBR_12_ZD1, NGBR_12_ZD1B,
-			NGBR_12_MIRROR,	NGBR_26 } kernel;
+// KL(m) Based on NGBR_6_MIRROR, i.e. CalcEnergy6NgbrMirror
+// (eventually on CalcEnergy6NgbrMirror_lex KL?)
+			NGBR_6_LLB      // KL(m) LLB: influence of temperature
+                      } kernel;
   /// Exchange formulation to use.  "unknown" is invalid; it
   /// is defined for error detection.
   /// NOTE: "kernel" is set inside the constructor, and should
   ///  be fixed thereafter.
   
+  // Periodic boundaries
+  mutable int xperiodic;
+  mutable int yperiodic;
+  mutable int zperiodic;
+
   // "?coef" and "?integ" are coefficient matrices used by some
   // of the CalcEnergy routines.  (Well, currently just 12NgbrZD1.)
   // They are "mutable" so they can be changed from inside the
@@ -63,141 +64,22 @@ private:
   mutable OC_REAL8m energy_density_error_estimate; // Cached value,
                                  /// initialized when mesh changes.
 
-  void InitCoef_12NgbrZD1(OC_INDEX size,
-			  OC_REAL8m wgt[3],
-			  Nb_2DArrayWrapper<OC_REAL8m>& coef) const;
-  /// Sets "coef" and "integ" arrays for use by NGBR_12_ZD1 kernel.
-
-  // Support for threaded mindot calculations
-  mutable vector<OC_REAL8m> mindot;
-
-  // Utility routine for CalcEnergy6NgbrBigAngleMirror
-  OC_REAL8m ComputeAngle(const ThreeVector& u1,const ThreeVector& u2) const;
+  // Support for threaded calculations
+  mutable vector<OC_REAL8m> maxdot; // KL(m): here it is used
+  // in a form of maxMdiffSq
+  //mutable vector<OC_REAL8m> maxMdiffSq; <- my old naming
+  mutable vector<OC_REAL8m> min_m;      // KL(m)
+  mutable vector<OC_REAL8m> max_m;      // KL(m)
 
   // Calculation routines for each of the
   // aforementioned energy formulations.
-  void CalcEnergy6NgbrFree
-  (const Oxs_MeshValue<ThreeVector>& spin,
-   const Oxs_MeshValue<OC_REAL8m>& Ms_inverse,
-   const Oxs_RectangularMesh* mesh,
-   Oxs_ComputeEnergyDataThreaded& ocedt,
-   Oxs_ComputeEnergyDataThreadedAux& ocedtaux,
-   OC_INDEX node_start,OC_INDEX node_stop,
-   int threadnumber) const;
-  void CalcEnergy6NgbrMirror
-  (const Oxs_MeshValue<ThreeVector>& spin,
-   const Oxs_MeshValue<OC_REAL8m>& Ms_inverse,
-   const Oxs_RectangularMesh* mesh,
-   Oxs_ComputeEnergyDataThreaded& ocedt,
-   Oxs_ComputeEnergyDataThreadedAux& ocedtaux,
-   OC_INDEX node_start,OC_INDEX node_stop,
-   int threadnumber) const;
-  void CalcEnergy6NgbrMirror_lex
-  (const Oxs_MeshValue<ThreeVector>& spin,
-   const Oxs_MeshValue<OC_REAL8m>& Ms,
-   const Oxs_RectangularMesh* mesh,
-   Oxs_ComputeEnergyDataThreaded& ocedt,
-   Oxs_ComputeEnergyDataThreadedAux& ocedtaux,
-   OC_INDEX node_start,OC_INDEX node_stop,
-   int threadnumber) const;
-  void CalcEnergy6NgbrMirrorStd
-  (const Oxs_MeshValue<ThreeVector>& spin,
-   const Oxs_MeshValue<OC_REAL8m>& Ms_inverse,
-   const Oxs_RectangularMesh* mesh,
-   Oxs_ComputeEnergyDataThreaded& ocedt,
-   Oxs_ComputeEnergyDataThreadedAux& ocedtaux,
-   OC_INDEX node_start,OC_INDEX node_stop,
-   int threadnumber) const;
-  void CalcEnergy6NgbrBigAngMirror
-  (const Oxs_MeshValue<ThreeVector>& spin,
-   const Oxs_MeshValue<OC_REAL8m>& Ms_inverse,
-   const Oxs_RectangularMesh* mesh,
-   Oxs_ComputeEnergyDataThreaded& ocedt,
-   Oxs_ComputeEnergyDataThreadedAux& ocedtaux,
-   OC_INDEX node_start,OC_INDEX node_stop,
-   int threadnumber) const;
-  void CalcEnergy6NgbrZD2
-  (const Oxs_MeshValue<ThreeVector>& spin,
-   const Oxs_MeshValue<OC_REAL8m>& Ms_inverse,
-   const Oxs_RectangularMesh* mesh,
-   Oxs_ComputeEnergyDataThreaded& ocedt,
-   Oxs_ComputeEnergyDataThreadedAux& ocedtaux,
-   OC_INDEX node_start,OC_INDEX node_stop,
-   int threadnumber) const;
   //KL(m)
-  void CalcEnergy6NgbrMirror_zperiodic
-  (const Oxs_MeshValue<ThreeVector>& spin,
-   const Oxs_MeshValue<OC_REAL8m>& Ms_inverse,
-   const Oxs_RectangularMesh* mesh,
-   Oxs_ComputeEnergyDataThreaded& ocedt,
-   Oxs_ComputeEnergyDataThreadedAux& ocedtaux,
-   OC_INDEX node_start,OC_INDEX node_stop,
-   int threadnumber) const;
-  void CalcEnergy6NgbrMirror_lex_zperiodic
-  (const Oxs_MeshValue<ThreeVector>& spin,
-   const Oxs_MeshValue<OC_REAL8m>& Ms,
-   const Oxs_RectangularMesh* mesh,
-   Oxs_ComputeEnergyDataThreaded& ocedt,
-   Oxs_ComputeEnergyDataThreadedAux& ocedtaux,
-   OC_INDEX node_start,OC_INDEX node_stop,
-   int threadnumber) const;
   void CalcEnergy6NgbrMirror_LLB
   (const Oxs_MeshValue<ThreeVector>& spin,
    const Oxs_MeshValue<OC_REAL8m>& Ms_inverse,
    const Oxs_MeshValue<OC_REAL8m>& Ms, // KL(m) we need it as well
    const Oxs_MeshValue<OC_REAL8m>& Me_T, // KL(m)
-   const Oxs_RectangularMesh* mesh,
-   Oxs_ComputeEnergyDataThreaded& ocedt,
-   Oxs_ComputeEnergyDataThreadedAux& ocedtaux,
-   OC_INDEX node_start,OC_INDEX node_stop,
-   int threadnumber) const;
-  void CalcEnergy6NgbrMirror_LLB_zp
-  (const Oxs_MeshValue<ThreeVector>& spin,
-   const Oxs_MeshValue<OC_REAL8m>& Ms_inverse,
-   const Oxs_MeshValue<OC_REAL8m>& Ms, // KL(m) we need it as well
-   const Oxs_MeshValue<OC_REAL8m>& Me_T, // KL(m)
-   const Oxs_RectangularMesh* mesh,
-   Oxs_ComputeEnergyDataThreaded& ocedt,
-   Oxs_ComputeEnergyDataThreadedAux& ocedtaux,
-   OC_INDEX node_start,OC_INDEX node_stop,
-   int threadnumber) const;
-  //
-  void CalcEnergy12NgbrFree
-  (const Oxs_MeshValue<ThreeVector>& spin,
-   const Oxs_MeshValue<OC_REAL8m>& Ms_inverse,
-   const Oxs_RectangularMesh* mesh,
-   Oxs_ComputeEnergyDataThreaded& ocedt,
-   Oxs_ComputeEnergyDataThreadedAux& ocedtaux,
-   OC_INDEX node_start,OC_INDEX node_stop,
-   int threadnumber) const;
-  void CalcEnergy12NgbrZD1
-  (const Oxs_MeshValue<ThreeVector>& spin,
-   const Oxs_MeshValue<OC_REAL8m>& Ms_inverse,
-   const Oxs_RectangularMesh* mesh,
-   Oxs_ComputeEnergyDataThreaded& ocedt,
-   Oxs_ComputeEnergyDataThreadedAux& ocedtaux,
-   OC_INDEX node_start,OC_INDEX node_stop,
-   int threadnumber) const;
-  void CalcEnergy12NgbrZD1B
-  (const Oxs_MeshValue<ThreeVector>& spin,
-   const Oxs_MeshValue<OC_REAL8m>& Ms_inverse,
-   const Oxs_RectangularMesh* mesh,
-   Oxs_ComputeEnergyDataThreaded& ocedt,
-   Oxs_ComputeEnergyDataThreadedAux& ocedtaux,
-   OC_INDEX node_start,OC_INDEX node_stop,
-   int threadnumber) const;
-  void CalcEnergy12NgbrMirror
-  (const Oxs_MeshValue<ThreeVector>& spin,
-   const Oxs_MeshValue<OC_REAL8m>& Ms_inverse,
-   const Oxs_RectangularMesh* mesh,
-   Oxs_ComputeEnergyDataThreaded& ocedt,
-   Oxs_ComputeEnergyDataThreadedAux& ocedtaux,
-   OC_INDEX node_start,OC_INDEX node_stop,
-   int threadnumber) const;
-  void CalcEnergy26Ngbr
-  (const Oxs_MeshValue<ThreeVector>& spin,
-   const Oxs_MeshValue<OC_REAL8m>& Ms_inverse,
-   const Oxs_RectangularMesh* mesh,
+   const Oxs_CommonRectangularMesh* mesh,
    Oxs_ComputeEnergyDataThreaded& ocedt,
    Oxs_ComputeEnergyDataThreadedAux& ocedtaux,
    OC_INDEX node_start,OC_INDEX node_stop,
@@ -205,29 +87,9 @@ private:
 
   // Supplied outputs, in addition to those provided by Oxs_Energy.
   void UpdateDerivedOutputs(const Oxs_SimState& state);
-  // KL?? Is thi still used? Only in non-LLB mode? 
-  // You mean: periodic-usage of kl_uniformexchange, yes?
-  Oxs_ScalarOutput<Klm_UniformExchange> maxspinangle_output;
-  Oxs_ScalarOutput<Klm_UniformExchange> stage_maxspinangle_output;
-  Oxs_ScalarOutput<Klm_UniformExchange> run_maxspinangle_output;
-  String MaxSpinAngleStateName() const {
-    String dummy_name = InstanceName();
-    dummy_name += ":Max Spin Angle";
-    return dummy_name;
-  }
-  String StageMaxSpinAngleStateName() const {
-    String dummy_name = InstanceName();
-    dummy_name += ":Stage Max Spin Angle";
-    return dummy_name;
-  }
-  String RunMaxSpinAngleStateName() const {
-    String dummy_name = InstanceName();
-    dummy_name += ":Run Max Spin Angle";
-    return dummy_name;
-  }
+  // KL(m)
   // Do not control degree anymore (Max Spin Angle).
   // Instead we observe abolute magnetization change (units: A/m).
-  // This outputs will be filled only in LLB mode KL??
   Oxs_ScalarOutput<Klm_UniformExchange> maxMdiff_output;
   Oxs_ScalarOutput<Klm_UniformExchange> stage_maxMdiff_output;
   Oxs_ScalarOutput<Klm_UniformExchange> run_maxMdiff_output;
@@ -246,7 +108,6 @@ private:
     dummy_name += ":Run Max m Diff";
     return dummy_name;
   }
-  mutable vector<OC_REAL8m> maxMdiffSq;
   // Maximum |M|/|Me|
   Oxs_ScalarOutput<Klm_UniformExchange> min_m_output;
   Oxs_ScalarOutput<Klm_UniformExchange> stage_min_m_output;
@@ -284,8 +145,6 @@ private:
     dummy_name += ":Run Max m";
     return dummy_name;
   }
-  mutable vector<OC_REAL8m> min_m;
-  mutable vector<OC_REAL8m> max_m;
 
 protected:
   virtual void GetEnergy(const Oxs_SimState& state,
@@ -306,7 +165,7 @@ protected:
 
   virtual void ComputeEnergyChunkFinalize
   (const Oxs_SimState& state,
-   const Oxs_ComputeEnergyDataThreaded& ocedt,
+   Oxs_ComputeEnergyDataThreaded& ocedt,
    Oc_AlignedVector<Oxs_ComputeEnergyDataThreadedAux>& thread_ocedtaux,
    int number_of_threads) const;
 
@@ -324,6 +183,9 @@ public:
 		    const char* argstr);  // MIF input block parameters
   virtual ~Klm_UniformExchange();
   virtual OC_BOOL Init();
+
+  // Optional interface for conjugate-gradient evolver.
+  virtual int IncrementPreconditioner(PreconditionerData& pcd);
 };
 
 
